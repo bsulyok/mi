@@ -12,14 +12,13 @@ def append_1(array):
     return np.append(array, 1)
 
 def one_hot(digit):
-    a = np.zeros((10))
+    a = np.zeros(10)
     a[digit] = 1
     return a
 
 def relu(input_vector):
     input_vector[input_vector < 0] = 0
     return input_vector
-    #return np.maximum(0, input_vector)
 
 def heaviside(input_vector):
     return input_vector != 0
@@ -34,6 +33,15 @@ def softmax_deriv(input_vector):
     np.fill_diagonal(b, input_vector)
     return a+b
 
+def delta_add(a, b):
+    if a == None:
+        return b
+    else:
+        v_sum = []
+        for v1, v2 in zip(a, b):
+            v_sum.append(v1+v2)
+        return v_sum
+
 class neural_network:
     
     def __init__(self, hidden_layers):
@@ -43,81 +51,101 @@ class neural_network:
         self.iteration = 0
         self.layers = [np.random.randn(j, i+1)*np.sqrt(2/(i+1)) for i, j in pairwise([self.input_size] + hidden_layers + [self.output_size])]
         self.accuracy = 0
+        self.layer_num = len(self.layers)
 
-    def train(self, X_train, Y_train, X_test, Y_test, b, t):
+    def train(self, X_train, Y_train, X_test, Y_test, b, test_size):
         for k in range(int(len(X_train)/b)):
             X, Y = X_train[k*b:k*b+b], Y_train[k*b:k*b+b]
             inputs = [np.hstack(img/255) for img in X[:b]]
+            test_inputs = [np.hstack(img/255) for img in X_test]
             targets = [one_hot(label) for label in Y[:b]]
+            test_targets = Y_test
             same = 0
-            #for k in range(10):
             while same < 5:
-                for i, j in zip(inputs, targets):
-                    outputs, activated_outputs = self.feedforward(i)
-                    self.backpropagate(outputs, activated_outputs, j)
-                acc, err = self.acc_test(X_test, Y_test, b, t)
+                sum_delta_vector = None
+                for i, t in zip(inputs, targets):
+                    input_vector, output_vector = self.feedforward(i)
+                    delta_vector = self.backpropagate(input_vector, output_vector, t)
+                    sum_delta_vector = delta_add(sum_delta_vector, delta_vector)
+                self.update_layers(sum_delta_vector)
+                acc, err = self.acc_test(test_inputs, test_targets, b, test_size)
                 self.iteration += 1
                 if acc > self.accuracy:
                     self.accuracy = acc
                 elif acc == self.accuracy:
                     same +=1
-                print(acc)
             print('Reached accuracy of {} on batch #{}!'.format(self.accuracy, k))
     
-    def backpropagate(self, output_vector, activated_vector, target):
-        coeff = 1./(self.iteration + 30) 
-        deltas = [output_vector[-1]-target]
-        for k in range(len(activated_vector)):
-            a = self.layers[-k-1].transpose().dot(deltas[-1])
-            b = heaviside(output_vector[-k-2])
-            deltas.append(a[:-1]*b)
-        for k in range(len(activated_vector)):
-            c = np.outer(deltas[k], append_1(output_vector[-k-2]))
-            self.layers[-k-1] -= coeff*c
-
-    def feedforward(self, input_vector):
-        outputs, activated_outputs = [], []
+    def feedforward(self, inpt):
+        output_vector = []
+        input_vector = []
         for layer in self.layers:
-            output = np.dot(layer, append_1(input_vector))
-            outputs.append(output)
-            if not np.array_equal(layer, self.layers[-1]):
-                activated_outputs.append(relu(output))
-            input_vector = activated_outputs[-1]
-        return outputs, activated_outputs
-    
+            input_vector.append(inpt)
+            outpt, act_outp = self.feed_1(layer, inpt)
+            inpt = act_outp
+            output_vector.append(outpt)
+        return input_vector, output_vector
+
+    def feed_1(self, layer, a):
+        output = np.dot(layer, append_1(a))
+        activated_output = relu(output)
+        return output, activated_output
+
+    def backpropagate(self, input_vector, output_vector, target):
+        c_vector = [output_vector[-1]-target]
+        for k in range(self.layer_num-1):
+            c = self.backprop_1(self.layers[-k-1],output_vector[-k-2], c_vector[-1])
+            c_vector.append(c)
+        delta_vector = []
+        for c, inpt in zip(c_vector[::-1], input_vector):
+            delta = np.outer(c, append_1(inpt))
+            delta_vector.append(delta)
+        return delta_vector
+
+    def backprop_1(self, layer, outpt, delta):
+        a = np.dot(layer.transpose(),delta)
+        b = heaviside(outpt)
+        return a[:-1]*b
+
+    def update_layers(self, delta_vector):
+        for layer_num, delta in zip(range(len(self.layers)), delta_vector):
+            self.update_1(layer_num, delta)
+
+    def update_1(self, layer_num, c):
+        learning_rate = 1/(self.iteration + 10) 
+        self.layers[layer_num] -= learning_rate*c/batch_size
+
     def guess(self, test_input):
-        return self.feedforward(test_input)[0][-1]
+        return self.feedforward(test_input)[1][-1]
 
     def get_error(self, output, target):
-        a = output-one_hot(target)
-        return sum((a)**2)/784
+        a = output-target
+        return sum((a)**2)/2
 
-    def acc_test(self, X, Y, b, t):
+    def acc_test(self, X, Y, b, test_size):
         correct, err = 0, 0
-        samples = np.random.randint(len(X), size=t)
-        #samples = np.arange(b)
+        samples = np.random.randint(len(X), size=test_size)
         for sample in samples:
             output = self.guess(X[sample])
             correct += output.argmax() == Y[sample]
             err += self.get_error(output, Y[sample])
-        return correct/t, err/t
+        return correct/test_size, err/test_size
 
     def print_network(self, filename):
         for layer in self.layers:
-            np.savetxt('{}_{}'.format(filename, len(layer)), layer, delimiter=';')
+            np.savetxt('{}_{}.txt'.format(filename, len(layer)), layer, delimiter=';')
 
     def print_layer(self, layer):
         print(self.layers[layer])
 
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
 
-
 meta = 100
 batch_size = meta/2
-test_size = meta/4
-NN = neural_network([600, 400, 200])
-NN.train(x_train[:meta], y_train[:meta], x_train[:meta], y_train[:meta], int(batch_size), int(test_size))
-print('Finished in {} iterations'.format(NN.iteration))
-#NN.print_layer(2)
+test_size = meta/10
 
-#NN.print_network('trained.txt') 
+NN = neural_network([400, 200])
+NN.train(x_train[:meta], y_train[:meta], x_test[:meta], y_test[:meta], int(batch_size), int(test_size))
+print('Finished in {} iterations'.format(NN.iteration))
+
+#NN.print_network('train') 
