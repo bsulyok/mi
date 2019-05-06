@@ -17,7 +17,9 @@ def one_hot(digit):
     return a
 
 def relu(input_vector):
-    return np.maximum(0, input_vector)
+    input_vector[input_vector < 0] = 0
+    return input_vector
+    #return np.maximum(0, input_vector)
 
 def heaviside(input_vector):
     return input_vector != 0
@@ -42,17 +44,18 @@ class neural_network:
         self.layers = [np.random.randn(j, i+1)*np.sqrt(2/(i+1)) for i, j in pairwise([self.input_size] + hidden_layers + [self.output_size])]
         self.accuracy = 0
 
-    def train(self, X_train, Y_train, X_test, Y_test, b):
+    def train(self, X_train, Y_train, X_test, Y_test, b, t):
         for k in range(int(len(X_train)/b)):
             X, Y = X_train[k*b:k*b+b], Y_train[k*b:k*b+b]
             inputs = [np.hstack(img/255) for img in X[:b]]
             targets = [one_hot(label) for label in Y[:b]]
             same = 0
+            #for k in range(10):
             while same < 5:
                 for i, j in zip(inputs, targets):
                     outputs, activated_outputs = self.feedforward(i)
                     self.backpropagate(outputs, activated_outputs, j)
-                acc, err = self.acc_test(X_test, Y_test, b)
+                acc, err = self.acc_test(X_test, Y_test, b, t)
                 self.iteration += 1
                 if acc > self.accuracy:
                     self.accuracy = acc
@@ -89,14 +92,15 @@ class neural_network:
         a = output-one_hot(target)
         return sum((a)**2)/784
 
-    def acc_test(self, X, Y, b):
+    def acc_test(self, X, Y, b, t):
         correct, err = 0, 0
-        samples = np.random.randint(len(X), size=b)
+        samples = np.random.randint(len(X), size=t)
+        #samples = np.arange(b)
         for sample in samples:
             output = self.guess(X[sample])
             correct += output.argmax() == Y[sample]
             err += self.get_error(output, Y[sample])
-        return correct/len(Y), err/len(Y)
+        return correct/t, err/t
 
     def print_network(self, filename):
         for layer in self.layers:
@@ -108,14 +112,12 @@ class neural_network:
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
 
 
-meta = 10
-NN = neural_network([400, 200])
-NN.train(x_train[:meta], y_train[:meta], x_test[:meta], y_test[:meta], int(meta))
-
+meta = 100
+batch_size = meta/2
+test_size = meta/4
+NN = neural_network([600, 400, 200])
+NN.train(x_train[:meta], y_train[:meta], x_train[:meta], y_train[:meta], int(batch_size), int(test_size))
 print('Finished in {} iterations'.format(NN.iteration))
+#NN.print_layer(2)
 
-#NN.print_layer(0)
-
-#print(NN.guess(x_train[0]))
-#print(y_train[0])
 #NN.print_network('trained.txt') 
