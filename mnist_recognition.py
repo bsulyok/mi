@@ -2,6 +2,7 @@ import numpy as np
 from keras.datasets import mnist
 import matplotlib.pyplot as plt
 from itertools import tee
+import sys
 
 def pairwise(iterable):
     a, b = tee(iterable)
@@ -21,7 +22,7 @@ def relu(input_vector):
     return input_vector
 
 def heaviside(input_vector):
-    return input_vector != 0
+    return input_vector >= 0
 
 def softmax(input_vector):
     a = np.exp(input_vector - np.max(input_vector))
@@ -57,23 +58,23 @@ class neural_network:
         for k in range(int(len(X_train)/b)):
             X, Y = X_train[k*b:k*b+b], Y_train[k*b:k*b+b]
             inputs = [np.hstack(img/255) for img in X[:b]]
-            test_inputs = [np.hstack(img/255) for img in X_test]
             targets = [one_hot(label) for label in Y[:b]]
-            test_targets = Y_test
             same = 0
-            while same < 5:
+            for p in range(20):
+            #while same < 5:
                 sum_delta_vector = None
                 for i, t in zip(inputs, targets):
                     input_vector, output_vector = self.feedforward(i)
                     delta_vector = self.backpropagate(input_vector, output_vector, t)
                     sum_delta_vector = delta_add(sum_delta_vector, delta_vector)
                 self.update_layers(sum_delta_vector)
-                acc, err = self.acc_test(test_inputs, test_targets, b, test_size)
+                acc, err = self.acc_test(X_test, Y_test, b, test_size)
                 self.iteration += 1
                 if acc > self.accuracy:
                     self.accuracy = acc
                 elif acc == self.accuracy:
                     same +=1
+                print('Iteration #{}'.format(self.iteration))
             print('Reached accuracy of {} on batch #{}!'.format(self.accuracy, k))
     
     def feedforward(self, inpt):
@@ -116,6 +117,7 @@ class neural_network:
         self.layers[layer_num] -= learning_rate*c/batch_size
 
     def guess(self, test_input):
+        test_input = np.hstack(test_input/255)
         return self.feedforward(test_input)[1][-1]
 
     def get_error(self, output, target):
@@ -138,14 +140,24 @@ class neural_network:
     def print_layer(self, layer):
         print(self.layers[layer])
 
+    def trained_guess(self, x_test):
+        print(self.guess(x_test).argmax())
+        plt.matshow(x_test)
+        plt.show()
+
+parser = sys.argv
+netw = [int(l) for l in parser[1:]]
+if not netw:
+    netw = [400, 200]
+
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
 
-meta = 100
-batch_size = meta/2
-test_size = meta/10
+meta = 50
+batch_size = 50
+test_size = 20
 
-NN = neural_network([400, 200])
-NN.train(x_train[:meta], y_train[:meta], x_test[:meta], y_test[:meta], int(batch_size), int(test_size))
+NN = neural_network(netw)
+NN.train(x_train[:meta], y_train[:meta], x_train[:5000], y_train[:5000], int(batch_size), int(test_size))
 print('Finished in {} iterations'.format(NN.iteration))
 
 #NN.print_network('train') 
