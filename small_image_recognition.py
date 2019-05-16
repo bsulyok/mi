@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import sys
 import time
 import os
+import cv2
 from itertools import tee
 from tqdm import tqdm
 
@@ -45,34 +46,56 @@ def delta_add(a, b):
             v_sum.append(v1+v2)
         return v_sum
 
+def initialize(user_input):
+    my_dict, data = None, None
+    if user_input == 'mnist':
+        from keras.datasets import mnist as data
+        my_dict =  {0:' 0', 1:' 1', 2:' 2', 3:' 3', 4:' 4', 5:' 5', 6:' 6', 7:' 7', 8:'n 8', 9:' 9'}
+    elif user_input == 'fashion_mnist':
+        from keras.datasets import fashion_mnist as data
+        my_dict = {0:' T-shirt', 1:' trouser', 2:' pullover', 3:' dress', 4:' coat', 5:' sandal', 6:' shirt', 7:' sneaker', 8:' bag', 9:'n ankle boot'}
+    elif user_input == 'cifar10':
+        from keras.datasets import cifar10 as data
+        my_dict = {0:'n airplane', 1:'n automobile', 2:' bird', 3:' cat', 4:' deer', 5:' dog', 6:' frog', 7:' horse', 8:' ship', 9:' truck'}
+    elif user_input == 'cifar100':
+        from keras.datasets import cifar100 as data
+        my_dict = {0:0, 1:1, 2:2, 3:3, 4:4, 5:5, 6:6, 7:7, 8:8, 9:9}
+    else:
+        print('Dataset {} not understood!\nTerminating'.format(user_input))
+        quit()
+    return my_dict, data 
+
 class network:
     
-    def __init__(self, hidden_layers):
-        self.input_size = 784
-        self.output_size = 10
+    def __init__(self, insize, netw, outsize, dataset):
+        self.input_size = insize
+        self.dataset = dataset
+        self.output_size = outsize
         self.epoch = 0
         self.running_time = 0
         self.layers = []
-        if hidden_layers[0] == 'new':
-            if not hidden_layers[1]:
-                layers_to_create = [400, 200]    
-            else:
-                layers_to_create = [int(l) for l in hidden_layers[1:]]
+        if type(netw) is list:
+            layers_to_create = [int(l) for l in netw]
             self.layers = [np.random.randn(j, i+1)*np.sqrt(2/(i+1)) for i, j in pairwise([self.input_size] + layers_to_create + [self.output_size])]
-        else:
-            with open(hidden_layers, 'r') as f:
-                layers_to_create, epoch, running_time = f.readlines()
+        elif type(netw) is str:
+            with open('networks/{}/data.csv'.format(netw), 'r') as f:
+                trained_dataset, layers_to_create, epoch, running_time = f.readlines()
+                if trained_dataset != self.dataset[:-1]:
+                    print('Datasets not alligned! This network has been trained for {} dataset, but called for usage on {}.\nTerminating process!'.format(trained_dataset[:-1], self.dataset))
+                    quit()
+                self.dataset = trained_dataset[:-1]
                 self.epoch = int(epoch[:-1])
                 self.running_time = float(running_time)
             for ltc in layers_to_create[:-1].split(';'):
-                self.layers.append(np.loadtxt('{}/{}.csv'.format(hidden_layers.split('.')[0], ltc), delimiter=';'))
+                self.layers.append(np.loadtxt('networks/{}/{}.csv'.format(netw.split('.')[0], ltc), delimiter=';'))
 
     def train(self, X_train, Y_train, batch_size):
         start_time, stop_time = time.time(), 0
         for k in tqdm(range(int(len(X_train)/batch_size))):
             X, Y = X_train[k*batch_size:k*batch_size+batch_size], Y_train[k*batch_size:k*batch_size+batch_size]
-            inputs = [np.hstack(img/255) for img in X[:batch_size]]
-            targets = [one_hot(label) for label in Y[:batch_size]]
+            inputs = [intensity.flatten()/255 for intensity in X]
+            targets = [one_hot(label) for label in Y]
+            print(targets)
             sum_delta_vector = None
             for i, t in zip(inputs, targets):
                 input_vector, output_vector = self.feedforward(i)
@@ -81,8 +104,6 @@ class network:
             self.update_layers(sum_delta_vector, batch_size)
         self.epoch += 1
         self.running_time += (time.time()-start_time)
-            #print('Finished batch #{} in {}!'.format(k, time.time()-stop_time))
-            #stop_time = time.time()
         print('\nFinished epoch in {}'.format(time.time()-start_time))
 
     def feedforward(self, inpt):
@@ -124,8 +145,8 @@ class network:
         learning_rate = 1/(self.epoch + 10) 
         self.layers[layer_num] -= learning_rate*c/batch_size
 
-    def guess(self, test_input):
-        test_input = np.hstack(test_input/255)
+    def trained_guess(self, test_input):
+        test_input = test_input.flatten()/255
         return self.feedforward(test_input)[1][-1]
 
     def get_error(self, output, target):
@@ -136,44 +157,43 @@ class network:
         for layer in self.layers:
             np.savetxt('{}_{}.txt'.format(filename, len(layer)), layer, delimiter=';')
 
-    def trained_guess(self, x_test):
-        print(self.guess(x_test).argmax())
-        plt.matshow(x_test)
+    def guess(self, x_test):
+        plt.imshow(x_test)
+        plt.title('This is a{}.'.format(train_dict[self.trained_guess(x_test).argmax()]))
         plt.show()
     
     def print_network(self, filename):
-        out_string = ''
+        out_string = '{}\n'.format(self.dataset)
+        if not os.path.exists('networks/{}'.format(filename)):
+            os.mkdir('networks/{}'.format(filename))
         for layer in self.layers:
             out_string+= '{};'.format(len(layer))
         out_string = out_string[:-1] + '\n{}\n{}'.format(self.epoch, self.running_time)
-        with open('{}.csv'.format(filename), 'w') as f: f.write(out_string)
-        if not os.path.exists(filename):
-            os.mkdir(filename)
+        with open('networks/{}/data.csv'.format(filename), 'w') as f: f.write(out_string)
         for layer in self.layers:
-            np.savetxt('{}/{}.csv'.format(filename,len(layer)), layer, delimiter=';')
+            np.savetxt('networks/{}/{}.csv'.format(filename,len(layer)), layer, delimiter=';')
 
-    def full_test(self, x_test, y_test):
+    def test(self, x_test, y_test):
         correct = 0
         for sample in tqdm(range(len(x_test))):
-            output = self.guess(x_test[sample])
+            output = self.trained_guess(x_test[sample])
             if output.argmax() == y_test[sample]:
                 correct += 1
         return correct/len(x_test)
+    
 
+if len(sys.argv) == 1 or sys.argv[1] not in ['mnist', 'fashion_mnist', 'cifar10', 'cifar100']:
+    print('Dataset input not recognized. Use "mnist", "fashion_mnist", "cifar10" or "cifar100"!')
+    quit()
 
-if sys.argv[1] == 'mnist':
-    from keras.datasets import mnist
-    (x_train, y_train), (x_test, y_test) = mnist.load_data()
-elif sys.argv[1] == 'fashion_mnist':
-    from keras.datasets import fashion_mnist
-    (x_train, y_train), (x_test, y_test) = fashion_mnist.load_data()
-else:
-    print('Dataset input not recognized. Use "mnist" or "fashion_mnist"!')
+train_dict, data = initialize(sys.argv[1])
+(x_train, y_train), (x_test, y_test) = data.load_data()
+input_size = len(x_test[0].flatten())
+output_size = int(max(y_test))+1
+NN = network(input_size, sys.argv[2:], output_size, sys.argv[1])
 
-if sys.argv[2] == 'new':
-    NN = network(sys.argv[2:])
-else:
-    NN = network(sys.argv[2])
+#x_train = [intensity.flatten()/255 for intensity in x_train]
+#x_test = [intensity.flatten()/255 for intensity in x_test]
 
 #NN.train(x_train[1000:2000], y_train[1000:2000], 50)
 #print('Finished in {} epochs'.format(NN.epoch))
