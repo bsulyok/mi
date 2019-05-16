@@ -61,8 +61,7 @@ def initialize(user_input):
         from keras.datasets import cifar100 as data
         my_dict = {0:0, 1:1, 2:2, 3:3, 4:4, 5:5, 6:6, 7:7, 8:8, 9:9}
     else:
-        print('Dataset {} not understood!\nTerminating'.format(user_input))
-        quit()
+        print('Input dataset {} not recognized!\nTerminating'.format(user_input))
     return my_dict, data 
 
 class network:
@@ -78,16 +77,13 @@ class network:
             layers_to_create = [int(l) for l in netw]
             self.layers = [np.random.randn(j, i+1)*np.sqrt(2/(i+1)) for i, j in pairwise([self.input_size] + layers_to_create + [self.output_size])]
         elif type(netw) is str:
-            with open('networks/{}/data.csv'.format(netw), 'r') as f:
+            with open('{}/data.csv'.format(netw), 'r') as f:
                 trained_dataset, layers_to_create, epoch, running_time = f.readlines()
-                if trained_dataset != self.dataset[:-1]:
-                    print('Datasets not alligned! This network has been trained for {} dataset, but called for usage on {}.\nTerminating process!'.format(trained_dataset[:-1], self.dataset))
-                    quit()
                 self.dataset = trained_dataset[:-1]
                 self.epoch = int(epoch[:-1])
                 self.running_time = float(running_time)
             for ltc in layers_to_create[:-1].split(';'):
-                self.layers.append(np.loadtxt('networks/{}/{}.csv'.format(netw.split('.')[0], ltc), delimiter=';'))
+                self.layers.append(np.loadtxt('{}/{}.csv'.format(netw.split('.')[0], ltc), delimiter=';'))
 
     def train(self, X_train, Y_train, batch_size):
         start_time, stop_time = time.time(), 0
@@ -95,7 +91,6 @@ class network:
             X, Y = X_train[k*batch_size:k*batch_size+batch_size], Y_train[k*batch_size:k*batch_size+batch_size]
             inputs = [intensity.flatten()/255 for intensity in X]
             targets = [one_hot(label) for label in Y]
-            print(targets)
             sum_delta_vector = None
             for i, t in zip(inputs, targets):
                 input_vector, output_vector = self.feedforward(i)
@@ -142,7 +137,7 @@ class network:
             self.update_1(layer_num, delta, batch_size)
 
     def update_1(self, layer_num, c, batch_size):
-        learning_rate = 1/(self.epoch + 10) 
+        learning_rate = 1/(self.epoch + 100) 
         self.layers[layer_num] -= learning_rate*c/batch_size
 
     def trained_guess(self, test_input):
@@ -164,14 +159,14 @@ class network:
     
     def print_network(self, filename):
         out_string = '{}\n'.format(self.dataset)
-        if not os.path.exists('networks/{}'.format(filename)):
-            os.mkdir('networks/{}'.format(filename))
+        if not os.path.exists('{}'.format(filename)):
+            os.mkdir('{}'.format(filename))
         for layer in self.layers:
             out_string+= '{};'.format(len(layer))
         out_string = out_string[:-1] + '\n{}\n{}'.format(self.epoch, self.running_time)
-        with open('networks/{}/data.csv'.format(filename), 'w') as f: f.write(out_string)
+        with open('{}/data.csv'.format(filename), 'w') as f: f.write(out_string)
         for layer in self.layers:
-            np.savetxt('networks/{}/{}.csv'.format(filename,len(layer)), layer, delimiter=';')
+            np.savetxt('{}/{}.csv'.format(filename,len(layer)), layer, delimiter=';')
 
     def test(self, x_test, y_test):
         correct = 0
@@ -179,18 +174,23 @@ class network:
             output = self.trained_guess(x_test[sample])
             if output.argmax() == y_test[sample]:
                 correct += 1
+        print('Accuracy: {}%'.format(100*correct/len(x_test)))
         return correct/len(x_test)
     
 
 if len(sys.argv) == 1 or sys.argv[1] not in ['mnist', 'fashion_mnist', 'cifar10', 'cifar100']:
-    print('Dataset input not recognized. Use "mnist", "fashion_mnist", "cifar10" or "cifar100"!')
-    quit()
+    print('Input dataset not recognized. Use "mnist", "fashion_mnist", "cifar10" or "cifar100"!')
 
 train_dict, data = initialize(sys.argv[1])
+
 (x_train, y_train), (x_test, y_test) = data.load_data()
 input_size = len(x_test[0].flatten())
 output_size = int(max(y_test))+1
-NN = network(input_size, sys.argv[2:], output_size, sys.argv[1])
+network_to_create = sys.argv[2:]
+if len(sys.argv) == 3:
+    network_to_create = sys.argv[2]
+
+NN = network(input_size, network_to_create, output_size, sys.argv[1])
 
 #x_train = [intensity.flatten()/255 for intensity in x_train]
 #x_test = [intensity.flatten()/255 for intensity in x_test]
