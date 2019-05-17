@@ -15,8 +15,8 @@ def pairwise(iterable):
 def append_1(array):
     return np.append(array, 1)
 
-def one_hot(digit):
-    a = np.zeros(10)
+def one_hot(digit, size):
+    a = np.zeros(size)
     a[digit] = 1
     return a
 
@@ -59,7 +59,7 @@ def initialize(user_input):
         my_dict = {0:'n airplane', 1:'n automobile', 2:' bird', 3:' cat', 4:' deer', 5:' dog', 6:' frog', 7:' horse', 8:' ship', 9:' truck'}
     elif user_input == 'cifar100':
         from keras.datasets import cifar100 as data
-        my_dict = {0:0, 1:1, 2:2, 3:3, 4:4, 5:5, 6:6, 7:7, 8:8, 9:9}
+        my_dict = {0:'n apple', 1:'a aquarium_fish', 2:' baby', 3:' bear', 4:' beaver', 5:' bed', 6:' bee', 7:' beetle', 8:' bicycle', 9:' bottle', 10:' bowl', 11:' boy', 12:' bridge', 13:' bus', 14:' butterfly', 15:' camel', 16:' can', 17:' castle', 18:' caterpillar', 19:' cattle', 20:' chair', 21:' chimpanzee', 22:' clock', 23:' cloud', 24:' cockroach', 25:' couch', 26:' crab', 27:' crocodile', 28:' cup', 29:' dinosaur', 30:' dolphin', 31:'n elephant', 32:' flatfish', 33:' forest', 34:' fox', 35:' girl', 36:' hamster', 37:' house', 38:' kangaroo', 39:' keyboard', 40:' lamp', 41:' lawn_mower', 42:' leopard', 43:' lion', 44:' lizard', 45:' lobster', 46:' man', 47:' maple_tree', 48:' motorcycle', 49:' mountain', 50:' mouse', 51:' mushroom', 52:'n oak_tree', 53:'n orange', 54:'n orchid', 55:'n otter', 56:' palm_tree', 57:' pear', 58:' pickup_truck', 59:' pine_tree', 60:' plain', 61:' plate', 62:' poppy', 63:' porcupine', 64:' possum', 65:' rabbit', 66:' raccoon', 67:' ray', 68:' road', 69:' rocket', 70:' rose', 71:' sea', 72:' seal', 73:' shark', 74:' shrew', 75:' skunk', 76:' skyscraper', 77:' snail', 78:' snake', 79:' spider', 80:' squirrel', 81:' streetcar', 82:' sunflower', 83:' sweet_pepper', 84:' table', 85:' tank', 86:' telephone', 87:' television', 88:' tiger', 89:' tractor', 90:' train', 91:' trout', 92:' tulip', 93:' turtle', 94:' wardrobe', 95:' whale', 96:' willow_tree', 97:' wolf', 98:' woman', 99:' worm'}
     else:
         print('Input dataset {} not recognized!\nTerminating'.format(user_input))
     return my_dict, data 
@@ -90,7 +90,7 @@ class network:
         for k in tqdm(range(int(len(X_train)/batch_size))):
             X, Y = X_train[k*batch_size:k*batch_size+batch_size], Y_train[k*batch_size:k*batch_size+batch_size]
             inputs = [intensity.flatten()/255 for intensity in X]
-            targets = [one_hot(label) for label in Y]
+            targets = [one_hot(label, self.output_size) for label in Y]
             sum_delta_vector = None
             for i, t in zip(inputs, targets):
                 input_vector, output_vector = self.feedforward(i)
@@ -137,7 +137,7 @@ class network:
             self.update_1(layer_num, delta, batch_size)
 
     def update_1(self, layer_num, c, batch_size):
-        learning_rate = 1/(self.epoch + 100) 
+        learning_rate = 1E-3 
         self.layers[layer_num] -= learning_rate*c/batch_size
 
     def trained_guess(self, test_input):
